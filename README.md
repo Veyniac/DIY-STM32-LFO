@@ -2,6 +2,8 @@
 
 IN PROGRESS
 
+![Orbit_Face](https://github.com/user-attachments/assets/19bf3e8d-ba15-47b2-9ec3-0fdd290280b1)
+
 Overview:
 	This is Orbit, an STM32-based Low Frequency Oscillator (LFO) that I designed for my custom modular 
 synthesizer. It features controls for frequency, phase, and amplitude, as well as seven different selectable 
