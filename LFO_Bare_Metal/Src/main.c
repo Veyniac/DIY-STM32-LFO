@@ -55,12 +55,17 @@ uint32_t currentPhase = 0;
 uint32_t lastRandom = 0;
 uint32_t newRandom = 0;
 volatile uint32_t interruptPeriod = 0;
-volatile uint32_t lastInterruptTime = 0;
+volatile uint32_t lastInterruptTime = 0; //in terms of millis()
 volatile uint32_t interruptCounter = 0;
-int32_t t;
+int32_t t; //master timescale
+int32_t t_relative = 0; //phase-shifted timescale
+int32_t last_t = 0; //previous time value
+int32_t last_t_relative = 0; //previous phase-shifted time value
 uint32_t lastZeroTime = 0;
-uint32_t hysteresisFactor = 16;
+int32_t hysteresisFactor = 20;
 volatile bool syncMode = false;
+bool syncStrike = false;
+uint8_t waveformStrike = 0;
 
 int main(void){
 
@@ -160,81 +165,101 @@ int main(void){
 
 	//loop
 	while(true){
-		if(*waveformReading<lastWaveformReading-hysteresisFactor || *waveformReading>lastWaveformReading+hysteresisFactor){
+		//keeps random noise from changing the wave
+		if(*waveformReading<lastWaveformReading-293-hysteresisFactor || *waveformReading>lastWaveformReading+293+hysteresisFactor){
+			waveformStrike++;
+		} else waveformStrike = 0;
+
+		if(waveformStrike>4){
 			waveform = map(*waveformReading,0,4095,0,6);
-			lastWaveformReading = *waveformReading;
-		} //else waveform doesn't change
+			lastWaveformReading = map(waveform,0,6,0,4095);
+			waveformStrike=0;
+		}
 
 		//knob is being moved
 		if((int32_t)*periodReading<((int32_t)lastPeriodReading-(int32_t)hysteresisFactor) || *periodReading>(lastPeriodReading+hysteresisFactor)){
-			syncMode = false;
-			lastPeriodReading = *periodReading;
-		}
+			if(syncStrike){
+				syncMode = false;
+				lastPeriodReading = *periodReading;
+			}
+			else syncStrike = true;
+		} else syncStrike = false;
 
 		amplitude = map(map(*amplitudeReading,0,4095,0,60),0,60,0,4095);
 
-		if(!syncMode) {         //free oscillation mode
+		if(!syncMode) {                                          //free oscillation mode
 			period = map(*periodReading,0,4095,100,10000);
 		} else {                                                 //synced oscillation mode
 			period = interruptPeriod;
 			if(lastInterruptTime>lastZeroTime && interruptCounter==0) lastZeroTime = lastInterruptTime;
 		}
-		phase = map(*phaseReading,0,4095,0,period);
 
 		if(currentPeriod<period) currentPeriod++;
 		else if(currentPeriod>period) currentPeriod--;
 
+		phase = map(*phaseReading,0,4095,0,currentPeriod);
+
+		if(currentPhase<phase) currentPhase++;
+		else if(currentPhase>phase) currentPhase--;
+
 		if(currentAmplitude<amplitude) currentAmplitude++;
 		else if(currentAmplitude>amplitude) currentAmplitude--;
 
+		t = (millis()-lastZeroTime)%currentPeriod; //calculate absolute time
+		if(t<last_t){
+			lastZeroTime = millis()-t;
+			t = (millis()-lastZeroTime)%currentPeriod;
+		}
 
-		t = (millis()-lastZeroTime)%currentPeriod;
-		if(t-phase<0) t+=currentPeriod;
-		if(t==0) lastZeroTime = millis();
+		t_relative = (t+currentPeriod-currentPhase)%currentPeriod; //calculate relative time (in terms of phase offset)
 
 		switch(waveform){
 		case 0:
 			GPIOB->ODR &= ~0b11111011;
 			GPIOB->ODR |= 0b1<<square;
-			output = square_wave(t, currentAmplitude, currentPeriod);
+			output = square_wave(t_relative, currentAmplitude, currentPeriod);
 			break;
 		case 1:
 			GPIOB->ODR &= ~0b11111011;
 			GPIOB->ODR |= 0b1<<ramp;
-			output = ramp_wave(t, currentAmplitude, currentPeriod);
+			output = ramp_wave(t_relative, currentAmplitude, currentPeriod);
 			break;
 		case 2:
 			GPIOB->ODR &= ~0b11111011;
 			GPIOB->ODR |= 0b1<<saw;
-			output = saw_wave(t, currentAmplitude, currentPeriod);
+			output = saw_wave(t_relative, currentAmplitude, currentPeriod);
 			break;
 		case 3:
 			GPIOB->ODR &= ~0b11111011;
 			GPIOB->ODR |= 0b1<<triangle;
-			output = triangle_wave(t, currentAmplitude, currentPeriod);
+			output = triangle_wave(t_relative, currentAmplitude, currentPeriod);
 			break;
 		case 4:
 			GPIOB->ODR &= ~0b11111011;
 			GPIOB->ODR |= 0b1<<sine;
-			output = sine_wave(t, currentAmplitude, currentPeriod);
+			output = sine_wave(t_relative, currentAmplitude, currentPeriod);
 			break;
 		case 5:
 			GPIOB->ODR &= ~0b11111011;
 			GPIOB->ODR |= 0b1<<randomStep;
-			if(t==0) output = map(map(map((RNG->DR & ~0xFFFFF000),0,4095,0,amplitude),0,4095,0,60),0,60,0,4095);
+			if(t_relative<(last_t_relative-hysteresisFactor)) {
+				output = map(map(map((RNG->DR & ~0xFFFFF000),0,4095,0,currentAmplitude),0,4095,0,60),0,60,0,4095);
+			}
 			break;
 		case 6:
 			GPIOB->ODR &= ~0b11111011;
 			GPIOB->ODR |= 0b1<<randomRamp;
-			if(t==0) {
+			if(t_relative<(last_t_relative-hysteresisFactor)) {
 				lastRandom = newRandom;
-				newRandom = map(map(map((RNG->DR & ~0xFFFFF000),0,4095,0,amplitude),0,4095,0,60),0,60,0,4095);
+				newRandom = map(map(map((RNG->DR & ~0xFFFFF000),0,4095,0,currentAmplitude),0,4095,0,60),0,60,0,4095);
 			}
-			output = (uint32_t)((((int32_t)newRandom-(int32_t)lastRandom)/(float)currentPeriod)*t+lastRandom);
+			output = (uint32_t)((float)(((int32_t)newRandom-(int32_t)lastRandom)/(float)currentPeriod)*t_relative+(int32_t)lastRandom);
 			break;
 		}
 		TIM16->CCR1 = map(output,0,4095,0,999); //control duty cycle of indicator LED
-		MCP4725_Write(output,false);
+		MCP4725_Write((4095-output),false); //write output value
+		last_t = t;
+		last_t_relative = t_relative;
 	}
 }
 

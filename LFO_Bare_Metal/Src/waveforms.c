@@ -26,7 +26,7 @@ uint32_t ramp_wave(uint32_t t, uint32_t amplitude, uint32_t period){
 }
 
 uint32_t triangle_wave(uint32_t t, uint32_t amplitude, uint32_t period){
-	if(t<period/2) return (uint32_t)(((float)2*amplitude/period)*t);
+	if(t<=period/2) return (uint32_t)(((float)2*amplitude/period)*t);
 	else return (uint32_t)(((float)2*amplitude/period)*(period-t));
 }
 
