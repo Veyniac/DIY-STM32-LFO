@@ -1,6 +1,6 @@
 # Orbit LFO
 
-<img src="https://github.com/user-attachments/assets/19bf3e8d-ba15-47b2-9ec3-0fdd290280b1" width=40% height=40%>
+<img src="https://github.com/user-attachments/assets/19bf3e8d-ba15-47b2-9ec3-0fdd290280b1" width=20% height=20%>
 
 ## Description
 This is Orbit, an STM32-based Low Frequency Oscillator (LFO) that I designed for my custom modular 
