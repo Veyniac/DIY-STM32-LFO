@@ -1,5 +1,4 @@
-# Orbit LFO
-
+# Orbit LFO  
 <img src="https://github.com/user-attachments/assets/19bf3e8d-ba15-47b2-9ec3-0fdd290280b1" width=20% height=20%>
 
 ## Description
